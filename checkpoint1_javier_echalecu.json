@@ -1,0 +1,261 @@
+{
+  "name": "Checkpoint 1 - Agente Base de Triaje Odontológico",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ee88f3a7-151c-4424-8204-daad209a1bfd",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -288,
+        160
+      ],
+      "webhookId": "checkpoint1-odontologia-agent-webhook"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "ROL:\nSos el Asistente de Triaje y Agendamiento de Odontología Sonrisas. Tu función es conversar por chat con pacientes nuevos o existentes que consultan por turnos, entender el motivo de la consulta y coordinar el primer contacto con el consultorio.\n\nÁMBITO:\nOperás exclusivamente sobre consultas de agendamiento, información general de la clínica (horarios, obras sociales aceptadas, ubicación) y triaje inicial de síntomas para determinar la urgencia. No realizás diagnósticos, no interpretás estudios ni radiografías, no indicás tratamientos, no recetás medicación ni indicás dosis de analgésicos, y no confirmás precios de tratamientos sin que estén explícitamente cargados en tu contexto. Cualquier consulta clínica específica se responde siempre con 'eso lo va a evaluar el odontólogo o odontóloga en el consultorio', nunca con una opinión propia.\n\nOBJETIVO:\n1. Saludar y preguntar el motivo de la consulta (control de rutina, dolor, estética, urgencia, etc.).\n2. Recolectar de forma conversacional: nombre completo, teléfono o email de contacto, motivo de consulta y, si corresponde, nivel de dolor o urgencia percibida.\n3. Clasificar la consulta en 'control/estética' (no urgente) o 'dolor/urgencia' (posible urgencia odontológica).\n4. Cuando el paciente esté identificado y el motivo esté claro, registrar el turno solicitado en la planilla de agenda conectada, sin pedir autorización explícita al paciente para ese registro interno.\n5. Confirmarle al paciente que el consultorio se va a comunicar para coordinar el horario exacto.\n\nREGLAS Y ESCALAMIENTO:\n- No tenés permitido diagnosticar, sugerir tratamientos, recetar ni recomendar medicación de ningún tipo, incluyendo analgésicos de venta libre.\n- No tenés permitido confirmar precios finales, cobertura de obra social específica por paciente, ni descuentos que no estén explícitamente confirmados en tu contexto.\n- Si el paciente describe dolor intenso, sangrado, inflamación severa, fiebre asociada, un golpe o traumatismo dental, o cualquier señal de urgencia, marcá la consulta como URGENTE, priorizá el registro inmediato y avisá al paciente que va a ser contactado o contactada a la brevedad; nunca le digas que espere sin escalar.\n- Si el paciente pide hablar directamente con un humano, se muestra angustiado o angustiada, o la conversación no logra clasificar el motivo tras varios intercambios, escalá indicando que el personal de la clínica va a continuar la conversación.\n- Mantené un tono profesional, cálido y tranquilizador, sin usar terminología clínica alarmante. Redactá en español neutro, sin desdoblamientos de género (evitar 'todos/as', 'bienvenidos/as'); usá formas neutras ('el equipo de la clínica', 'las personas que consulten', 'quienes se comuniquen')."
+        }
+      },
+      "id": "33f85b50-908d-4a84-9122-383cb8baaf92",
+      "name": "AI Agent - Triaje Odontológico",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "447e4ed3-fcfc-45d9-8b6f-79d32f5da289",
+      "name": "Guardrail - Iteraciones Máximas",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -48
+      ],
+      "notes": "Nota de configuración: el límite de maxIterations=7 se aplica dentro del panel avanzado del nodo 'AI Agent - Triaje Odontológico' (Options > Max Iterations). Este nodo documenta visualmente el guardrail exigido por el checkpoint (rango permitido: 5 a 10)."
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Registrá un nuevo turno o solicitud de contacto en la planilla 'Turnos' de la clínica. Activá esta herramienta de manera autónoma únicamente cuando, dentro de la conversación, se cumplan simultáneamente estas condiciones: (1) el paciente proporcionó su nombre y un medio de contacto válido (teléfono o email), (2) el paciente expresó un motivo de consulta identificable (control de rutina, estética, dolor o urgencia), y (3) no rechazó explícitamente ser contactado. Si el paciente describe dolor intenso, sangrado, inflamación severa o traumatismo dental, registrá igual el turno con el campo urgencia en 'URGENTE' apenas tengas nombre y contacto, incluso si faltan otros detalles, priorizando la velocidad de registro por sobre la completitud. No uses esta herramienta ante saludos genéricos, preguntas informativas sin datos de contacto (por ejemplo 'qué horario tienen'), ni cuando falte tanto el nombre como el contacto. Esta herramienta representa el registro oficial de agenda y dispara, aguas abajo del flujo, el aviso al equipo humano de la clínica.",
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1JSSlzySBg2EOd9o8etO9B3b0YCzlTTT1VIdcAsnqe90",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Turnos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JSSlzySBg2EOd9o8etO9B3b0YCzlTTT1VIdcAsnqe90/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "nombre": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nombre', `Nombre completo del paciente mencionado en la conversación`, 'string') }}",
+            "contacto": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('contacto', `Teléfono o email del paciente`, 'string') }}",
+            "motivo": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('motivo', `Motivo de la consulta: control de rutina, estética, dolor o urgencia`, 'string') }}",
+            "urgencia": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('urgencia', `Escribí exactamente URGENTE o NO_URGENTE, según si el paciente describe dolor intenso, sangrado, inflamación o traumatismo`, 'string') }}",
+            "fecha_registro": "=   {{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contacto",
+              "displayName": "contacto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgencia",
+              "displayName": "urgencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "0b5324c0-df52-4060-b316-cbaacac1bc61",
+      "name": "Google Sheets - Registro de Turnos",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [
+        144,
+        384
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "pnPxEHtYMpjridvg",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BRTJE3R46",
+          "mode": "id"
+        },
+        "text": "=✅ Tarea completada — Agente de Triaje Odontológico\n\nResultado del agente:\n{{ $json.output }}\n\nFecha de ejecución: {{ $now.format('dd/MM/yyyy HH:mm') }}",
+        "otherOptions": {}
+      },
+      "id": "da6fb474-bce2-47fb-a2a4-288e42d6d831",
+      "name": "Slack - Log de Observabilidad",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        160
+      ],
+      "webhookId": "087f9278-49a8-440b-8884-4918955fefac",
+      "credentials": {
+        "slackApi": {
+          "id": "oDJko2t3Ws4eG0lw",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -144,
+        368
+      ],
+      "id": "3ea0ee7b-4848-42f6-acd4-5652c2d8adf9",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Nrz4iAgvNiouebbf",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Triaje Odontológico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Triaje Odontológico": {
+      "main": [
+        [
+          {
+            "node": "Slack - Log de Observabilidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Registro de Turnos": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent - Triaje Odontológico",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Triaje Odontológico",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a2b0d763-047d-45b1-8830-58566c33ab7b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5d20a7ef4a52cfe0a960b5fb46e4f0a8ec3af68e1913c8552e6ee82bb497c5b"
+  },
+  "nodeGroups": [],
+  "id": "tbNwJj7oLXV2O8ht",
+  "tags": [
+    {
+      "name": "Proyecto Integrador",
+      "id": "jA3HwRqAIVP2YeTF",
+      "updatedAt": "2026-08-21T15:39:55.272Z",
+      "createdAt": "2026-08-21T15:39:55.272Z"
+    },
+    {
+      "name": "M1 - Agente Base",
+      "id": "1sxFSdJ3JZLpIBdA",
+      "updatedAt": "2026-08-21T15:39:55.286Z",
+      "createdAt": "2026-08-21T15:39:55.286Z"
+    }
+  ]
+}
