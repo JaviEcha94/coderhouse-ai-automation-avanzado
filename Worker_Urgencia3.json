@@ -1,0 +1,404 @@
+{
+  "name": "Worker_Urgencia3",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"nombre\": \"Laura Gómez\",\n  \"contacto\": \"11-5555-4444\",\n  \"motivo\": \"dolor fuerte en una muela desde ayer\"\n}"
+      },
+      "id": "561c7088-0ac4-480c-a3fe-86ec59ad9b3f",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2256,
+        96
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE ENTRADA.\nRecibe del Manager exactamente: { nombre, contacto, motivo }.\nNo recibe historial de chat ni metadata del AI Agent."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "mensaje_alerta",
+              "value": "={{ \"🚨 URGENCIA ODONTOLÓGICA\\nPaciente: \" + $json.nombre + \"\\nContacto: \" + $json.contacto + \"\\nMotivo: \" + $json.motivo + \"\\nRequiere atención prioritaria.\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "129d88b2-bfec-4a7d-b67f-234f51748205",
+      "name": "Set - Armar Mensaje de Alerta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2032,
+        96
+      ],
+      "notesInFlow": true,
+      "notes": "Arma el texto de la alerta y conserva los datos del paciente para el registro en planilla."
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BRTJE3R46",
+          "mode": "id"
+        },
+        "text": "={{ $json.mensaje_alerta }}",
+        "otherOptions": {}
+      },
+      "id": "822ef29d-0e65-477a-942f-d46a322f727a",
+      "name": "Slack - Enviar Alerta",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        -1808,
+        96
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "executeOnce": true,
+      "webhookId": "e0c25fab-4e4c-427a-82c8-d181d9c4f05c",
+      "credentials": {
+        "slackApi": {
+          "id": "oDJko2t3Ws4eG0lw",
+          "name": "Slack account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1JSSlzySBg2EOd9o8etO9B3b0YCzlTTT1VIdcAsnqe90",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Turnos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JSSlzySBg2EOd9o8etO9B3b0YCzlTTT1VIdcAsnqe90/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "nombre": "={{ $('Execute Workflow Trigger').first().json.nombre }}",
+            "contacto": "={{ $('Execute Workflow Trigger').first().json.contacto }}",
+            "motivo": "={{ $('Execute Workflow Trigger').first().json.motivo }}",
+            "urgencia": "URGENTE",
+            "fecha_registro": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contacto",
+              "displayName": "contacto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgencia",
+              "displayName": "urgencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a5968d9c-eaee-48e4-8333-e12a3161431e",
+      "name": "Google Sheets - Registrar Urgencia",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1584,
+        96
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notesInFlow": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleApi": {
+          "id": "pnPxEHtYMpjridvg",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Registra la urgencia en la planilla oficial de turnos con urgencia = URGENTE.\nMismas 5 columnas que ya existen en la hoja 'Turnos'."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "slack_ok",
+              "value": "={{ $('Slack - Enviar Alerta').first().json.error === undefined }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c2",
+              "name": "sheets_ok",
+              "value": "={{ $json.error === undefined }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c3",
+              "name": "detalle_fallo",
+              "value": "={{ ($('Slack - Enviar Alerta').first().json.error === undefined ? '' : 'No se pudo enviar la alerta al canal de Slack. ') + ($json.error === undefined ? '' : 'No se pudo registrar la urgencia en la planilla.') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a6339eea-1cef-4f39-9f62-5629c231bf0c",
+      "name": "Set - Consolidar Resultado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1376,
+        96
+      ],
+      "notesInFlow": true,
+      "notes": "Evalua de forma independiente el resultado de la alerta y del registro en planilla."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.slack_ok && $json.sheets_ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "204e6774-9fb4-40ae-a38a-f9b8301df9bc",
+      "name": "IF - ¿Urgencia gestionada OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1152,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "data",
+              "value": "={{ { \"accion\": \"alerta_enviada_y_urgencia_registrada\", \"timestamp\": $now.toISO(), \"estado_caso_sugerido\": \"URGENCIA_ESCALADA\" } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1f7cdc66-e02b-4650-b4d0-41609228919a",
+      "name": "Set - Salida Exitosa",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -928,
+        -16
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE SALIDA (éxito).\nDevuelve al Manager: { status: 'success', data: {...} }\n\n[M3] Se agrega 'estado_caso_sugerido' al contrato de salida, mismo patrón que Worker_Agendamiento."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "data",
+              "value": "={{ { \"motivo\": $json.detalle_fallo || 'Fallo al gestionar la urgencia', \"estado_caso_sugerido\": null } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "29b9a861-0d9f-4a06-99b7-2b3ce6f8c382",
+      "name": "Set - Salida Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -928,
+        192
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE SALIDA (contingencia).\nDevuelve al Manager: { status: 'error', data: { motivo } }\nEl Worker nunca muere sin reportar: siempre entrega un JSON estructurado.\n\n[M3] 'estado_caso_sugerido': null en error, mismo criterio que Worker_Agendamiento: el Manager conserva el estado previo en vez de adivinar."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set - Armar Mensaje de Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Armar Mensaje de Alerta": {
+      "main": [
+        [
+          {
+            "node": "Slack - Enviar Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack - Enviar Alerta": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Registrar Urgencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Registrar Urgencia": {
+      "main": [
+        [
+          {
+            "node": "Set - Consolidar Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Consolidar Resultado": {
+      "main": [
+        [
+          {
+            "node": "IF - ¿Urgencia gestionada OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - ¿Urgencia gestionada OK?": {
+      "main": [
+        [
+          {
+            "node": "Set - Salida Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Salida Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "086d8756-7bf5-4d88-8f8e-53fe09d9937d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5d20a7ef4a52cfe0a960b5fb46e4f0a8ec3af68e1913c8552e6ee82bb497c5b"
+  },
+  "nodeGroups": [],
+  "id": "g1iJSrv3FlkcMj42",
+  "tags": []
+}

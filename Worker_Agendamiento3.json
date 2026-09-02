@@ -1,0 +1,273 @@
+{
+  "name": "Worker_Agendamiento3",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"nombre\": \"Laura Gómez\",\n  \"contacto\": \"11-5555-4444\",\n  \"motivo\": \"control de rutina\"\n}"
+      },
+      "id": "714d598c-e21c-47ca-815c-a6179532cab5",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -656,
+        112
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE ENTRADA.\nRecibe del Manager exactamente: { nombre, contacto, motivo }.\nNo recibe historial de chat ni metadata del AI Agent."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1JSSlzySBg2EOd9o8etO9B3b0YCzlTTT1VIdcAsnqe90",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Turnos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JSSlzySBg2EOd9o8etO9B3b0YCzlTTT1VIdcAsnqe90/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "nombre": "={{ $json.nombre }}",
+            "contacto": "={{ $json.contacto }}",
+            "motivo": "={{ $json.motivo }}",
+            "urgencia": "NO_URGENTE",
+            "fecha_registro": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contacto",
+              "displayName": "contacto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgencia",
+              "displayName": "urgencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "634d5e6a-3622-421f-9a52-a4c15a04faee",
+      "name": "Google Sheets - Registrar Turno",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -448,
+        112
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "executeOnce": true,
+      "credentials": {
+        "googleApi": {
+          "id": "pnPxEHtYMpjridvg",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.error === undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bb1dd230-50f4-4569-b621-25730828265e",
+      "name": "IF - ¿Sheets OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "data",
+              "value": "={{ { \"accion\": \"turno_registrado\", \"timestamp\": $now.toISO(), \"estado_caso_sugerido\": \"EN_AGENDAMIENTO\" } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fd2e701d-6ee5-45b1-a8a3-4a00d492e4b0",
+      "name": "Set - Salida Exitosa",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE SALIDA (éxito).\nDevuelve al Manager: { status: 'success', data: {...} }\n\n[M3] Se agrega 'estado_caso_sugerido' al contrato de salida. El Manager lo usa en el bloque de escritura de memoria para no tener que re-derivar el estado del caso a partir de la categoría; el Worker, que es quien realmente ejecutó la acción, es la fuente de verdad de en qué estado quedó la sesión."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "data",
+              "value": "={{ { \"motivo\": \"No se pudo registrar el turno en la planilla\", \"estado_caso_sugerido\": null } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f459389-5bcb-4dc8-9eec-22bc6b921431",
+      "name": "Set - Salida Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        208
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE SALIDA (contingencia).\nDevuelve al Manager: { status: 'error', data: { motivo } }\nEl Worker nunca muere sin reportar: siempre entrega un JSON estructurado.\n\n[M3] 'estado_caso_sugerido': null a propósito. Si el Worker falló, no hay accion confirmada que sugerir -> el Manager conserva el estado_caso que ya tenía el registro en Airtable en vez de sobreescribirlo con una suposición."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Registrar Turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Registrar Turno": {
+      "main": [
+        [
+          {
+            "node": "IF - ¿Sheets OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - ¿Sheets OK?": {
+      "main": [
+        [
+          {
+            "node": "Set - Salida Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Salida Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9765aac5-9819-4326-80f4-de8e7adf10b9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5d20a7ef4a52cfe0a960b5fb46e4f0a8ec3af68e1913c8552e6ee82bb497c5b"
+  },
+  "nodeGroups": [],
+  "id": "nmr6L1cd4mh616wI",
+  "tags": []
+}

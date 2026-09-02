@@ -1,0 +1,662 @@
+{
+  "name": "Worker_CRM_Email",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"email\": \"laura.gomez@gmail.com\",\n  \"nombre_pila\": \"Laura\",\n  \"apellido\": \"Gómez\",\n  \"telefono\": \"11-5555-4444\",\n  \"motivo\": \"dolor fuerte en una muela desde ayer\",\n  \"categoria\": \"URGENCIA\",\n  \"asunto\": \"Consulta por dolor\",\n  \"message_id_header\": \"<CAF+abc123@mail.gmail.com>\",\n  \"cuerpo_borrador\": \"Hola Laura,\\n\\nRegistramos tu consulta como prioritaria.\\n\\nSaludos,\\nEquipo de Odontología Sonrisas\",\n  \"resumen_slack\": \"URGENCIA · dolor fuerte en una muela desde ayer\"\n}"
+      },
+      "id": "4a2a3bc0-2994-4c20-a15f-6937bbb9c581",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1936,
+        -624
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE ENTRADA (M4).\nRecibe del Manager exactamente 10 campos escalares, ya validados y saneados en 'Set - Payload Mínimo para CRM y Correo'.\nNo recibe historial de chat, ni el objeto crudo del Gmail Trigger, ni adjuntos binarios, ni metadata del AI Agent.\n\nTercer Worker del sistema. Mismo contrato de salida { status, data } que Worker_Agendamiento y Worker_Urgencia desde M3, para que el bloque de escritura de memoria del Manager lo absorba sin modificarse."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "ev1",
+              "leftValue": "={{ /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(String($json.email || '')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1bcbba3b-ba50-401e-b13c-948bbee613f6",
+      "name": "IF - ¿Email Válido para el CRM?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1712,
+        -624
+      ],
+      "notesInFlow": true,
+      "notes": "SEGUNDA BARRERA CONTRA EL ERROR 400 (criterio 35%).\nEl Manager ya validó el email antes de delegar; este IF es la validación defensiva del lado del Worker, para que el conector de HubSpot nunca reciba una llamada sin identificador único válido aunque el Worker se invoque manualmente o desde otro punto del sistema.\n\nfalse -> se corta el circuito ANTES de tocar cualquier API externa y se devuelve un error estructurado al Manager. Ni HubSpot ni Gmail se llaman en vano.\n\nComparación booleana directa, no operador 'exists': lección 10 de M2, los campos que vienen por rutas con Continue On Fail llegan como string y rompen la validación de tipos."
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "operation": "search",
+        "limit": 1,
+        "filterGroupsUi": {
+          "filterGroupsValues": [
+            {
+              "filtersUi": {
+                "filterValues": [
+                  {
+                    "propertyName": "email",
+                    "value": "={{ $json.email }}"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "properties": [
+            "email",
+            "firstname",
+            "lastname",
+            "phone"
+          ]
+        }
+      },
+      "id": "7571d823-73ec-4dcd-809e-f6e98e495c98",
+      "name": "HubSpot - Buscar Contacto (Look up)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        -1472,
+        -720
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notesInFlow": true,
+      "executeOnce": true,
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "cVq1GpQP25W3e4Yi",
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "② COMPUERTA LOOK UP — MITIGACIÓN DEL ERROR 409 (criterio 35%).\nIntegración externa 2/3, autenticada con HubSpot Service Key (criterio de mínimo privilegio resuelto con scopes acotados a contacts en HubSpot, ver §8.1 de la guía).\n\nOPERACIÓN DE LECTURA: busca por igualdad exacta de email, propiedades acotadas a email/firstname/lastname/phone. limit=1.\n\n'Always Output Data': si no hay coincidencias, el nodo emite un item sin 'id' en vez de cortar la ejecución -> el IF siguiente distingue 'contacto nuevo' de 'fallo del CRM'."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cx1",
+              "leftValue": "={{ $json.id !== undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "57c78bc2-e00a-43c5-a2b4-e0e548a574d9",
+      "name": "IF - ¿Contacto Existe en CRM?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1152,
+        -720
+      ],
+      "notesInFlow": true,
+      "notes": "BIFURCACIÓN DEL LOOK UP.\ntrue  -> el contacto ya está en el CRM -> actualización INCREMENTAL (solo teléfono y último motivo).\nfalse -> contacto nuevo -> alta COMPLETA con lifecycle stage 'lead'.\n\nPor qué el look up no es redundante: el conector nativo de HubSpot expone la escritura de contactos como create-or-update por email, así que el 409 no explota, pero sin esta compuerta el sistema pisaría el firstname/lastname de un paciente ya cargado por el equipo comercial con lo que haya extraído el LLM del texto del correo. El look up decide QUÉ campos se escriben, no solo si se escribe."
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "email": "={{ $('Execute Workflow Trigger').first().json.email }}",
+        "additionalFields": {
+          "phoneNumber": "={{ $('Execute Workflow Trigger').first().json.telefono }}"
+        },
+        "options": {}
+      },
+      "id": "36c93b51-f5d7-4375-8a62-8179f161ad90",
+      "name": "HubSpot - Actualizar Contacto Existente",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        -928,
+        -816
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notesInFlow": true,
+      "executeOnce": true,
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "cVq1GpQP25W3e4Yi",
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "ESCRITURA INCREMENTAL. Solo actualiza teléfono. NO pisa firstname/lastname existentes: si el contacto ya está en el CRM, su identidad la definió un humano, no el extractor del LLM."
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "email": "={{ $('Execute Workflow Trigger').first().json.email }}",
+        "additionalFields": {
+          "firstName": "={{ $('Execute Workflow Trigger').first().json.nombre_pila }}",
+          "lastName": "={{ $('Execute Workflow Trigger').first().json.apellido }}",
+          "lifeCycleStage": "lead",
+          "phoneNumber": "={{ $('Execute Workflow Trigger').first().json.telefono }}"
+        },
+        "options": {}
+      },
+      "id": "ffbe67c4-7f33-4de8-961c-9c9b9bb4c32d",
+      "name": "HubSpot - Crear Contacto Nuevo",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        -928,
+        -624
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notesInFlow": true,
+      "executeOnce": true,
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "cVq1GpQP25W3e4Yi",
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "ALTA COMPLETA — solo se alcanza si el look up devolvió cero coincidencias. Carga email, nombre, apellido, teléfono y lifecycle stage 'lead'."
+    },
+    {
+      "parameters": {},
+      "id": "15671381-110e-4308-87a2-61c5e096ed44",
+      "name": "Merge - Contacto Sincronizado",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -704,
+        -720
+      ],
+      "notesInFlow": true,
+      "notes": "Converge las dos ramas mutuamente excluyentes del look up. Mismo patrón que 'Merge - Contexto de Memoria' de M3."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cs1",
+              "name": "crm_ok",
+              "value": "={{ $json.error === undefined }}",
+              "type": "boolean"
+            },
+            {
+              "id": "cs2",
+              "name": "contacto_crm_id",
+              "value": "={{ String($json.id || $json.vid || 'sin-id') }}",
+              "type": "string"
+            },
+            {
+              "id": "cs3",
+              "name": "contacto_era_nuevo",
+              "value": "={{ (() => { try { return $('HubSpot - Buscar Contacto (Look up)').first().json.id === undefined; } catch(e) { return true; } })() }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "95e8e2c9-5682-4c2e-87e9-3c341d927463",
+      "name": "Set - Resultado de Sincronización CRM",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -496,
+        -720
+      ],
+      "notesInFlow": true,
+      "executeOnce": true,
+      "notes": "Captura el resultado del CRM sin cortar el flujo: aunque HubSpot haya fallado, el borrador de respuesta al paciente se crea igual. La atención al paciente no se bloquea por un problema del CRM."
+    },
+    {
+      "parameters": {
+        "jsCode": "const tls = require('tls');\n\n// Credenciales por variable de entorno del contenedor Docker -> NUNCA en el JSON del workflow.\nconst IMAP_HOST = $env.IMAP_HOST || 'imap.gmail.com';\nconst IMAP_PORT = Number($env.IMAP_PORT || 993);\nconst IMAP_USER = $env.IMAP_USER;\nconst IMAP_PASS = $env.IMAP_APP_PASSWORD;\nconst DRAFTS_FOLDER = $env.IMAP_DRAFTS_FOLDER || '[Gmail]/Drafts';\n\nif (!IMAP_USER || !IMAP_PASS) {\n  throw new Error('Faltan IMAP_USER / IMAP_APP_PASSWORD como variables de entorno del contenedor telara-n8n.');\n}\n\nfunction connect(host, port) {\n  return new Promise((resolve, reject) => {\n    const socket = tls.connect(port, host, { servername: host }, () => resolve(socket));\n    socket.once('error', reject);\n  });\n}\n\nfunction waitFor(socket, isDone, timeoutMs = 15000) {\n  return new Promise((resolve, reject) => {\n    let buf = '';\n    const timer = setTimeout(() => {\n      socket.removeListener('data', onData);\n      reject(new Error('Timeout IMAP, ultima respuesta: ' + buf.slice(-300)));\n    }, timeoutMs);\n    function onData(chunk) {\n      buf += chunk.toString('utf8');\n      if (isDone(buf)) {\n        clearTimeout(timer);\n        socket.removeListener('data', onData);\n        resolve(buf);\n      }\n    }\n    socket.on('data', onData);\n  });\n}\n\nconst taggedOk = (tag) => (buf) => new RegExp('(^|\\\\r\\\\n)' + tag + ' (OK|NO|BAD)', 'i').test(buf);\n\nconst item = $input.first().json;\nconst toAddr = item.email;\nconst subject = (item.asunto && item.asunto.trim()) ? ('Re: ' + item.asunto) : 'Re: tu consulta';\nconst bodyText = item.cuerpo_borrador ||\n  'Hola,\\n\\nRecibimos tu consulta. El equipo de la clinica se va a comunicar con vos.\\n\\nSaludos,\\nEquipo de Odontologia Sonrisas';\nconst inReplyTo = item.message_id_header || '';\n\nconst headerLines = [\n  'From: ' + IMAP_USER,\n  'To: ' + toAddr,\n  'Subject: ' + subject,\n  'Date: ' + new Date().toUTCString(),\n  'MIME-Version: 1.0',\n  'Content-Type: text/plain; charset=UTF-8',\n  'Content-Transfer-Encoding: 8bit'\n];\nif (inReplyTo) {\n  headerLines.push('In-Reply-To: ' + inReplyTo);\n  headerLines.push('References: ' + inReplyTo);\n}\nconst rfc822 = headerLines.join('\\r\\n') + '\\r\\n\\r\\n' + String(bodyText).replace(/\\n/g, '\\r\\n');\nconst size = Buffer.byteLength(rfc822, 'utf8');\n\nlet socket, draftCreated = false, errorMsg = '';\ntry {\n  socket = await connect(IMAP_HOST, IMAP_PORT);\n  await waitFor(socket, (b) => b.includes('* OK'));\n\n  function imapQuote(str) {\n  return '\"' + String(str).trim().replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"') + '\"';\n}\nsocket.write('a1 LOGIN ' + imapQuote(IMAP_USER) + ' ' + imapQuote(IMAP_PASS) + '\\r\\n');\n  const login = await waitFor(socket, taggedOk('a1'));\n  if (!/a1 OK/i.test(login)) throw new Error('LOGIN rechazado por el servidor IMAP.');\n\n  socket.write('a2 APPEND \"' + DRAFTS_FOLDER + '\" (\\\\Draft) {' + size + '}\\r\\n');\n  await waitFor(socket, (b) => /\\+ ?/.test(b));\n\n  socket.write(rfc822 + '\\r\\n');\n  const append = await waitFor(socket, taggedOk('a2'), 20000);\n  if (!/a2 OK/i.test(append)) throw new Error('APPEND rechazado: revisar nombre de carpeta DRAFTS_FOLDER (' + DRAFTS_FOLDER + ').');\n\n  draftCreated = true;\n  socket.write('a3 LOGOUT\\r\\n');\n  await waitFor(socket, (b) => /a3 OK|BYE/i.test(b), 5000).catch(() => {});\n} catch (e) {\n  errorMsg = e.message || String(e);\n} finally {\n  if (socket) socket.end();\n}\n\nreturn [{\n  json: {\n    ...item,\n    id: draftCreated ? ('imap-draft-' + Date.now()) : undefined,\n    error: draftCreated ? undefined : (errorMsg || 'No se pudo crear el borrador via IMAP APPEND')\n  }\n}];"
+      },
+      "id": "8e705e96-01c1-47a7-b325-6b0f29ee43fd",
+      "name": "Code - Crear Borrador vía IMAP APPEND (HITL)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        -720
+      ],
+      "notesInFlow": true,
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "executeOnce": true,
+      "continueOnFail": true,
+      "notes": "③ HUMAN-IN-THE-LOOP OBLIGATORIO (criterio de Gobernanza).\n\nSin nodo nativo de 'Draft' para protocolo IMAP genérico en n8n (el nodo Gmail sí lo tiene, pero requiere OAuth2). Implementación honesta con el módulo built-in `tls` de Node -> ninguna librería externa, no requiere tocar la imagen de Docker.\n\nProtocolo hablado a mano: LOGIN -> APPEND \\Draft a la carpeta de Borradores -> LOGOUT. Nunca hay un comando de ENVÍO en ningún punto del código: la garantía de HITL es que el verbo IMAP que se usa es literalmente 'guardar', no 'enviar'.\n\nCREDENCIALES: IMAP_USER / IMAP_APP_PASSWORD se leen de `$env`, variables de entorno del contenedor `telara-n8n` (agregadas al `docker run` o al `docker-compose.yml`, NUNCA escritas en este JSON). Requiere `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (default) en la config del contenedor.\n\nTHREADING: si vino `message_id_header` desde el correo original (capturado en 'Set - Extraer Session_ID' del Manager), el borrador sale con In-Reply-To/References -> Gmail lo agrupa en el mismo hilo cuando el operador lo revisa.\n\n⚠️ FRÁGIL POR NATURALEZA (protocolo hablado a mano, no nodo nativo): probar en vivo antes de exportar. Si `[Gmail]/Drafts` falla, la cuenta puede tener el idioma de la interfaz en español -> usar `IMAP_DRAFTS_FOLDER=[Gmail]/Borradores` como variable de entorno, o correr `a1 LIST \"\" \"*\"` manualmente para ver el nombre real de la carpeta."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ps1",
+              "name": "texto_slack",
+              "value": "={{ '📥 Nuevo correo procesado — casilla de soporte\\nPaciente: ' + ($('Execute Workflow Trigger').first().json.nombre_pila || 'sin nombre') + ' ' + ($('Execute Workflow Trigger').first().json.apellido || '') + '\\nEmail: ' + $('Execute Workflow Trigger').first().json.email + '\\nAsunto: ' + $('Execute Workflow Trigger').first().json.asunto + '\\nTriaje: ' + $('Execute Workflow Trigger').first().json.resumen_slack + '\\nCRM: ' + ($('Set - Resultado de Sincronización CRM').first().json.crm_ok ? ($('Set - Resultado de Sincronización CRM').first().json.contacto_era_nuevo ? 'contacto creado' : 'contacto actualizado') : 'ERROR de sincronización') + '\\nBorrador: ' + ($json.error === undefined ? 'creado, pendiente de revisión humana ✋' : 'NO se pudo crear') + '\\nFecha: ' + $now.format('dd/MM/yyyy HH:mm') }}",
+              "type": "string"
+            },
+            {
+              "id": "ps2",
+              "name": "draft_ok",
+              "value": "={{ $json.error === undefined }}",
+              "type": "boolean"
+            },
+            {
+              "id": "ps3",
+              "name": "draft_id",
+              "value": "={{ String($json.id || 'sin-draft') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e707aef5-50be-46c2-ad5a-cf63f8b9116b",
+      "name": "Set - Payload Mínimo para Slack",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -48,
+        -720
+      ],
+      "notesInFlow": true,
+      "executeOnce": true,
+      "notes": "FILTRO MÍNIMO VIABLE PREVIO AL CONECTOR DE MENSAJERÍA (paso 8 de la consigna).\n\nAl canal de operaciones viaja UN solo campo de texto plano, armado a mano. Lo que queda deliberadamente afuera:\n· el cuerpo completo del correo entrante (puede pesar cientos de KB con firmas HTML y cadenas de respuestas),\n· el objeto crudo del borrador devuelto por la API de Gmail,\n· el objeto completo del contacto de HubSpot,\n· cualquier propiedad binaria (adjuntos) — de hecho el Gmail Trigger ya los descarta en origen.\n\nEl triaje que se muestra viene pre-truncado a 280 caracteres desde el Manager. Slack recibe una tarjeta legible, no un volcado. Mismo criterio que la prohibición de volcado bruto en memoria de M3, aplicado ahora al canal del equipo."
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BRTJE3R46",
+          "mode": "id"
+        },
+        "text": "={{ $json.texto_slack }}",
+        "otherOptions": {}
+      },
+      "id": "468be456-51c2-4896-a61d-7a6c00f2cc82",
+      "name": "Slack - Notificar a Operaciones",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        -720
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notesInFlow": true,
+      "executeOnce": true,
+      "webhookId": "19e1555b-d53f-4ae7-a213-321a61037651",
+      "credentials": {
+        "slackApi": {
+          "id": "oDJko2t3Ws4eG0lw",
+          "name": "Slack account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Integración externa 3/3 — Slack (canal del equipo de operaciones) vía OAuth2.\nScopes de mínimo privilegio: chat:write (escritura) + channels:read (resolución del canal). Sin channels:history -> la app no puede leer lo que el equipo conversa. Sin files:write -> no puede subir archivos.\n\nEs además el aviso operativo del HITL: le dice al equipo que hay un borrador esperando revisión."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "ok1",
+              "leftValue": "={{ $('Set - Resultado de Sincronización CRM').first().json.crm_ok && $('Set - Payload Mínimo para Slack').first().json.draft_ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "369185ac-7b6f-4581-a218-b81754340798",
+      "name": "IF - ¿Integraciones OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        -720
+      ],
+      "notesInFlow": true,
+      "notes": "Evalúa las dos acciones críticas de forma independiente: sincronización del CRM y creación del borrador. La notificación de Slack es informativa, no condiciona el status devuelto al Manager."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "data",
+              "value": "={{ { \"accion\": \"crm_sincronizado_y_borrador_creado\", \"timestamp\": $now.toISO(), \"estado_caso_sugerido\": null, \"contacto_crm_id\": $('Set - Resultado de Sincronización CRM').first().json.contacto_crm_id, \"contacto_era_nuevo\": $('Set - Resultado de Sincronización CRM').first().json.contacto_era_nuevo, \"draft_id\": $('Set - Payload Mínimo para Slack').first().json.draft_id, \"pendiente_aprobacion_humana\": true } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "adbc7e74-f1d3-4142-b40f-117a76c1575e",
+      "name": "Set - Salida Exitosa",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        -816
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE SALIDA (éxito) — idéntico en forma al de los Workers de M3.\n\n'estado_caso_sugerido': null A PROPÓSITO. Este Worker sincroniza sistemas y prepara un borrador; NO cambia el estado clínico del caso, que ya lo definió el Worker de Agendamiento o de Urgencia aguas arriba. Devolver null hace que el Manager CONSERVE el estado_caso previo en Airtable en lugar de pisarlo.\n\nEfecto secundario deseado: no introduce ningún valor nuevo en el Single Select 'estado_caso', así que no hace falta tocar el esquema de Airtable ni se puede disparar el 422 documentado en la sección 16 del handoff.\n\n'pendiente_aprobacion_humana': true deja constancia trazable de que la respuesta NO fue enviada."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "data",
+              "value": "={{ { \"motivo\": ($('Set - Resultado de Sincronización CRM').first().json.crm_ok ? '' : 'No se pudo sincronizar el contacto en el CRM. ') + ($('Set - Payload Mínimo para Slack').first().json.draft_ok ? '' : 'No se pudo crear el borrador de respuesta en Gmail.'), \"timestamp\": $now.toISO(), \"estado_caso_sugerido\": null } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1d65283b-76c7-46fc-afb3-346a8d5bfe0a",
+      "name": "Set - Salida Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        -624
+      ],
+      "notesInFlow": true,
+      "notes": "CONTRATO DE SALIDA (contingencia).\nEl Worker nunca muere sin reportar: detalla qué integración falló para que el Manager dispare la alerta a supervisor humano con información accionable."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pi1",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "pi2",
+              "name": "data",
+              "value": "={{ { \"motivo\": \"Payload inválido: el email del remitente no superó la validación de formato. No se invocó ninguna API externa.\", \"timestamp\": $now.toISO(), \"estado_caso_sugerido\": null } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a90b8e9a-42df-4760-b065-fbeca84654ec",
+      "name": "Set - Salida Error (Payload Inválido)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1472,
+        -480
+      ],
+      "notesInFlow": true,
+      "notes": "CORTOCIRCUITO PREVENTIVO CONTRA EL ERROR 400.\nSe alcanza sin haber consumido ni una sola llamada a HubSpot, Gmail o Slack. El error se detecta y se reporta en el borde del sistema, no lo devuelve la API externa."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "IF - ¿Email Válido para el CRM?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - ¿Email Válido para el CRM?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot - Buscar Contacto (Look up)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Salida Error (Payload Inválido)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot - Buscar Contacto (Look up)": {
+      "main": [
+        [
+          {
+            "node": "IF - ¿Contacto Existe en CRM?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - ¿Contacto Existe en CRM?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot - Actualizar Contacto Existente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HubSpot - Crear Contacto Nuevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot - Actualizar Contacto Existente": {
+      "main": [
+        [
+          {
+            "node": "Merge - Contacto Sincronizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot - Crear Contacto Nuevo": {
+      "main": [
+        [
+          {
+            "node": "Merge - Contacto Sincronizado",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge - Contacto Sincronizado": {
+      "main": [
+        [
+          {
+            "node": "Set - Resultado de Sincronización CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Resultado de Sincronización CRM": {
+      "main": [
+        [
+          {
+            "node": "Code - Crear Borrador vía IMAP APPEND (HITL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Payload Mínimo para Slack": {
+      "main": [
+        [
+          {
+            "node": "Slack - Notificar a Operaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack - Notificar a Operaciones": {
+      "main": [
+        [
+          {
+            "node": "IF - ¿Integraciones OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - ¿Integraciones OK?": {
+      "main": [
+        [
+          {
+            "node": "Set - Salida Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Salida Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Crear Borrador vía IMAP APPEND (HITL)": {
+      "main": [
+        [
+          {
+            "node": "Set - Payload Mínimo para Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "eaecf88f-1d2b-4c51-804c-de408853e76a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5d20a7ef4a52cfe0a960b5fb46e4f0a8ec3af68e1913c8552e6ee82bb497c5b"
+  },
+  "nodeGroups": [],
+  "id": "Ix8HvvrHvqUgLUQB",
+  "tags": [
+    {
+      "updatedAt": "2026-08-21T15:39:55.272Z",
+      "createdAt": "2026-08-21T15:39:55.272Z",
+      "id": "jA3HwRqAIVP2YeTF",
+      "name": "Proyecto Integrador"
+    }
+  ]
+}
